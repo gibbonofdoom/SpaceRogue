@@ -410,10 +410,11 @@ def planet_colours( planetType = 'moon' ):
             libtcod.Color(colour_bg[0], colour_bg[1], colour_bg[2])
             )
 
-# def point_on_ellipse( x, y , w, h, angle ):
-#     ePX = x + (w * math.cos( math.radians(angle) ))
-#     ePY = y + (h * math.sin( math.radians(angle) ))
-#     return(ePX, ePY)
+def setMapColours( map, x, y, colour ):
+    map[x][y].colour = colour
+    map[x][y].colour_bg = colour
+    map[x][y].colour_hidden = colour
+    map[x][y].colour_hidden_bg = colour
 
 def dot(vA, vB):
     return vA[0]*vB[0]+vA[1]*vB[1]
@@ -453,12 +454,15 @@ def make_planet( ):
     planet_colour, planet_colour_bg = planet_colours( random.choice(['moon', 'planet']) )
     planet_centre = planet.center()
 
-    planet_shadow_ellipse = Ellipse(planet_centre[0], planet_centre[1], (planet.radius * random.uniform(1, 1.9)), planet.radius * 2)
-    planet_shadow_ellipse_points = []
-    planet_shadow_side = random.choice([0,1,2,3])
+    planet_shadow_side = random.choice([0,1,2,3,4])
 
-    for a in range(360):
-        planet_shadow_ellipse_points.append(planet_shadow_ellipse.pointFromAngle(a))
+    if planet_shadow_side != 4:
+        #If the planet is lit front on we dont need the ellipse calcs
+        planet_shadow_ellipse = Ellipse(planet_centre[0], planet_centre[1], (planet.radius * random.uniform(1, 1.9)), planet.radius * 2)
+        planet_shadow_ellipse_points = []
+
+        for a in range(360):
+            planet_shadow_ellipse_points.append(planet_shadow_ellipse.pointFromAngle(a))
 
     for x in range( planet.x1, planet.x2 ):
         for y in range( planet.y1, planet.y2 ):
@@ -467,9 +471,6 @@ def make_planet( ):
                     map_planet[x][y].block_sight = False
                     map_planet[x][y].blocked = False
                     map_planet[x][y].char = random.choice(['#', '&', '%'])
-                    map_planet[x][y].x = x
-                    map_planet[x][y].y = y
-                    map_planet[x][y].name = 'Planet'
 
                     #Gradient coef for shading the planet
                     gradient_coef = clamp((planet.distanceFromCentre(x, y) / planet.radius), 0, 0.9)
@@ -480,37 +481,24 @@ def make_planet( ):
                     map_planet[x][y].colour_hidden = libtcod.color_lerp( map_planet[x][y].colour_hidden, spaceColours['space'], gradient_coef )
                     map_planet[x][y].colour_hidden_bg = libtcod.color_lerp( map_planet[x][y].colour_hidden_bg, spaceColours['space'], gradient_coef )
 
-                    #If it's in the shadow of the sun, make it dark
+                    #If it's in the shadow of the sun, make it dark, or it's full lit
                     if planet_shadow_side <= 1:
                         #Most of the planet is in light
                         if planet_shadow_side == 0:
                             if not planet_shadow_ellipse.pointInEllipse(x, y) and x >= planet_centre[0]:
-                                map_planet[x][y].colour = spaceColours['space_hidden_planet']
-                                map_planet[x][y].colour_bg = spaceColours['space_hidden_planet']
-                                map_planet[x][y].colour_hidden = spaceColours['space_hidden_planet']
-                                map_planet[x][y].colour_hidden_bg = spaceColours['space_hidden_planet']
+                                setMapColours(map_planet, x, y, spaceColours['space_hidden_planet'])
                         elif planet_shadow_side == 1:
                             if not planet_shadow_ellipse.pointInEllipse(x, y) and x <= planet_centre[0]:
-                                map_planet[x][y].colour = spaceColours['space_hidden_planet']
-                                map_planet[x][y].colour_bg = spaceColours['space_hidden_planet']
-                                map_planet[x][y].colour_hidden = spaceColours['space_hidden_planet']
-                                map_planet[x][y].colour_hidden_bg = spaceColours['space_hidden_planet']
-                    else:
+                                setMapColours(map_planet, x, y, spaceColours['space_hidden_planet'])
+                    elif planet_shadow_side <= 3:
                         #Most of it is in shadow, making a crescent
                         if planet_shadow_side == 2:
                             if planet_shadow_ellipse.pointInEllipse(x, y) or x >= planet_centre[0]:
-                                    map_planet[x][y].colour = spaceColours['space_hidden_planet']
-                                    map_planet[x][y].colour_bg = spaceColours['space_hidden_planet']
-                                    map_planet[x][y].colour_hidden = spaceColours['space_hidden_planet']
-                                    map_planet[x][y].colour_hidden_bg = spaceColours['space_hidden_planet']
+                                setMapColours(map_planet, x, y, spaceColours['space_hidden_planet'])
                         elif planet_shadow_side == 3:
                             if planet_shadow_ellipse.pointInEllipse(x, y) or x <= planet_centre[0]:
-                                map_planet[x][y].colour = spaceColours['space_hidden_planet']
-                                map_planet[x][y].colour_bg = spaceColours['space_hidden_planet']
-                                map_planet[x][y].colour_hidden = spaceColours['space_hidden_planet']
-                                map_planet[x][y].colour_hidden_bg = spaceColours['space_hidden_planet']
-
-
+                                setMapColours(map_planet, x, y, spaceColours['space_hidden_planet'])
+                    
 def clamp(inV, inMin, inMax):
     return max(inMin, min(inV, inMax))
 
@@ -521,6 +509,10 @@ def make_dust():
     for x in range(MAP_WIDTH):
         for y in range(MAP_HEIGHT):
             if random.random() < 0.01:
+                
+                # if map_planet[x][y].char != ' ':
+                #     map[x][y].colour_bg = map_planet[x][y].colour_bg
+
                 map[x][y].char = '.'
                 map[x][y].colour = libtcod.Color( random.randint(50,80), random.randint(50,80), random.randint(50,80) )
                 map[x][y].name = 'dust'
@@ -765,8 +757,8 @@ def render_all():
         #Render planet
         for y in range(CAMERA_HEIGHT):
             for x in range(CAMERA_WIDTH):
-                (map_x, map_y) = (int(camera_x + x), int(camera_y + y)) #Map-Space
-                # (map_x, map_y) = (int(camera_x + x - player.x * 0.9), int(camera_y + y - player.y * 0.9)) #Offset
+                # (map_x, map_y) = (int(camera_x + x), int(camera_y + y)) #Map-Space
+                (map_x, map_y) = (int(camera_x + x - player.x * 0.2), int(camera_y + y - player.y * 0.2)) #Offset
 
                 visible = libtcod.map_is_in_fov(fov_map, int(camera_x + x), int(camera_y + y))
 
