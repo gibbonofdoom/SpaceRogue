@@ -54,43 +54,138 @@ TORCH_RADIUS = 20
 
 LIMIT_FPS = 20  #20 frames-per-second maximum
  
- 
-color_dark_wall = libtcod.Color(0, 0, 100)
-color_light_wall = libtcod.Color(130, 110, 50)
-color_dark_ground = libtcod.Color(50, 50, 150)
-color_light_ground = libtcod.Color(200, 180, 50)
- 
 spaceColours = {
-                    'space'                 :   libtcod.Color( 8,8,8 ), 
-                    'space_hidden'          :   libtcod.black,
-                    'space_hidden_planet'   :   libtcod.Color( 2,2,2 )
-                    # 'space_dust'        :   libtcod.grey
+                    'space'                     :   libtcod.Color( 8,8,8 ), 
+                    'space_hidden'              :   libtcod.black,
+                    'space_hidden_planet'       :   libtcod.Color( 2,2,2 ),
+                    'asteroid'                  :   libtcod.lightest_sepia,
+                    'asteroid_bg'               :   libtcod.darker_sepia,
+                    'asteroid_hidden'           :   libtcod.dark_sepia,
+                    'asteroid_hidden_bg'        :   libtcod.darkest_sepia,
+                    'asteroid_floor'            :   libtcod.sepia,
+                    'asteroid_floor_bg'         :   libtcod.dark_sepia,
+                    'asteroid_floor_bg_hidden'  :   libtcod.black
 }
 
+ship = {
+            'geometry'                  :   [   
+                                                [205, 187, ' ', 218 ,205 , 191, ' ', ' ', ' ', ' ', ' ', ' '], 
+                                                [' ', 195, 196, 217, '#', 192, 196, 196, 196, 196, 191, ' '], 
+                                                [' ', 180, '#', '#', '#', '#', '#', 10, '#', '#', 192, 191], 
+                                                [205, 180, '#', '#', '#', '#', '#', '#', '#', 192, '#', 179], 
+                                                [' ', 180, '#', '#', '#', '#', '#', '#', '#', '#', 218, 217], 
+                                                [' ', 195, 196, 191, '#', 218, 196, 196, 196, 196, 217, ' '], 
+                                                [205, 188, ' ', 192, 205 , 217, ' ', ' ', ' ', ' ', ' ', ' ']
+                                            ],
+
+            'colour_map'                :   [
+                                                ['engine',  'hull', ' ',        'hull',     'door',    'hull',    ' ',    ' ',    ' ',    ' ',    ' ',    ' '], 
+                                                [' ',       'hull', 'hull',     'hull',     'floor',   'hull',    'hull',    'hull',    'hull',    'hull',    'hull',    ' '], 
+                                                [' ',       'hull', 'floor',     'floor',    'floor',   'floor',   'floor',  'computer','floor',   'floor',   'window',    'window'], 
+                                                ['engine',  'hull', 'floor',    'floor',    'floor',   'floor',   'floor',   'floor',   'floor',   'floor',   'floor',     'window'], 
+                                                [' ',       'hull', 'floor',    'floor',    'floor',   'floor',   'floor',   'floor',   'floor',   'floor',   'window',    'window'], 
+                                                [' ',       'hull', 'hull',     'hull',     'floor',   'hull',    'hull',    'hull',    'hull',    'hull',    'hull',    ' '], 
+                                                ['engine',  'hull', ' ',        'hull',     'door',    'hull',    ' ',    ' ',    ' ',    ' ',    ' ',    ' ']            
+                                            ],   
+
+            'colours'                   :   {
+                                                'engine'
+                                                            :   {
+                                                                'colour'    :   libtcod.blue,
+                                                                'colour_bg' :   libtcod.light_blue
+                                                            },
+                                                'hull' 
+                                                            :   {
+                                                                'colour'    :   libtcod.grey,
+                                                                'colour_bg' :   libtcod.darkest_grey
+                                                            },
+                                                'floor'                                                   
+                                                            :   {
+                                                                'colour'    :   libtcod.grey,
+                                                                'colour_bg' :   libtcod.darker_grey
+                                                            },
+                                                'computer'                                                   
+                                                            :   {
+                                                                'colour'    :   libtcod.lightest_green,
+                                                                'colour_bg' :   libtcod.white
+                                                            },
+                                                'window'
+                                                            :   {
+                                                                'colour'    :   libtcod.dark_cyan,
+                                                                'colour_bg' :   libtcod.darkest_cyan
+                                                            },
+                                                'door'
+                                                            :   {
+                                                                'colour'    :   libtcod.darkest_red,
+                                                                'colour_bg' :   libtcod.dark_red
+                                                            }
+                                            }
+}
 
 class Tile( ):
-    #a tile of the map and its properties
-    def __init__(   self, blocked, char = ' ', x = 0, y = 0, name = None, block_sight = None, 
-                    colour = spaceColours['space'], colour_hidden = spaceColours['space_hidden'], 
-                    colour_bg = spaceColours['space'], colour_hidden_bg = spaceColours['space_hidden']):
+    #A tile of the map and its properties
+    def __init__( self, blocked, name = None, space = False, planet = False, x = 0, y = 0,
+                    char = ' ', colour = spaceColours['space'], colour_bg = spaceColours['space'], 
+                    colour_hidden = libtcod.dark_grey, colour_hidden_bg = spaceColours['space_hidden'],
+                    block_sight = None, tile_behaviour = None ):
 
-        self.blocked = blocked
-        self.x = x
-        self.y = y
         self.name = name
+        self.blocked = blocked
         self.char = char
+        self.explored = False
+        # self.x = x
+        # self.y = y
+        self.space = space
+        self.planet = planet
         self.colour = colour
+        self.colour_bg = colour_bg
         self.colour_hidden = colour_hidden
         self.colour_hidden_bg = colour_hidden_bg
-        self.colour_bg = colour_bg
- 
-        #all tiles start unexplored
-        self.explored = False
- 
-        #by default, if a tile is blocked, it also blocks sight
+
+        if self.colour_hidden == 'normal_darken':
+            self.colour_hidden = colour
+            libtcod.color_scale_HSV(self.colour_hidden, 1, 1)
+
+        self.tile_behaviour = tile_behaviour
+        if self.tile_behaviour != None:
+            self.tile_behaviour.owner = self
+
+        #By default, if a tile is blocked, it also blocks sight:
         if block_sight is None: block_sight = blocked
         self.block_sight = block_sight
- 
+
+
+######################################################
+#                  TILE BEHAVIOUR
+######################################################
+
+class Door( ):
+    global map, fov_recompute
+
+    def __init__( self, x, y, doorRange = 2 ):
+        self.x = x
+        self.y = y
+        self.doorRange = doorRange
+
+    #Door tile_behaviour component for a tile
+    def update( self ):
+        #Update the tile when needed
+        if ( self.distance_to( player ) <= self.doorRange):
+            self.owner.char = '-'
+            self.owner.blocked = False
+            self.owner.block_sight = False
+        else:
+            self.owner.char = 205
+            self.owner.blocked = True
+            self.owner.block_sight = True
+        fov_recompute = True
+
+    def distance_to( self, other ):
+        #return the distance to another object
+        dx = other.x - self.x
+        dy = other.y - self.y
+        return math.sqrt( dx ** 2 + dy ** 2 )
+
 class Rect( ):
     #a rectangle on the map. used to characterize a room.
     def __init__(self, x, y, w, h):
@@ -108,7 +203,7 @@ class Rect( ):
         #returns true if this rectangle intersects with another one
         return (self.x1 <= other.x2 and self.x2 >= other.x1 and
                 self.y1 <= other.y2 and self.y2 >= other.y1)
- 
+
 class Circle( Rect ):
     def __init__( self, x, y, radius ):
         self.x = x
@@ -125,7 +220,7 @@ class Circle( Rect ):
         centreX, centreY = self.center()
         return  math.sqrt( (x - centreX) ** 2 + ( y - centreY ) ** 2 )
             
-class Ellipse:
+class Ellipse( ):
                         #midX midY, radius Horizonal, radius Vertical
     def __init__( self, mx, my, rh, rv ):
         self.mx = mx
@@ -170,12 +265,13 @@ class Ellipse:
 class Object:
     #this is a generic object: the player, a monster, an item, the stairs...
     #it's always represented by a character on screen.
-    def __init__(self, x, y, char, name, color, blocks=False, fighter=None, ai=None, item=None):
+    def __init__( self, x, y, char, name, colour, colour_bg = None, blocks = False, fighter = None, ai = None, item = None ):
         self.x = int(x)
         self.y = int(y)
         self.char = char
         self.name = name
-        self.color = color
+        self.colour = colour
+        self.colour_bg = colour_bg
         self.blocks = blocks
         self.fighter = fighter
         if self.fighter:  #let the fighter component know who owns it
@@ -189,9 +285,9 @@ class Object:
         if self.item:  #let the Item component know who owns it
             self.item.owner = self
  
-    def move(self, dx, dy):
-        #move by the given amount, if the destination is not blocked
-        if not is_blocked(int(self.x + dx), int(self.y + dy)):
+    def move( self, dx, dy ):
+        #Collision Check
+        if not is_blocked( int(self.x + dx),  int(self.y + dy)):
             self.x += dx
             self.y += dy
  
@@ -217,27 +313,32 @@ class Object:
         #return the distance to some coordinates
         return math.sqrt((x - self.x) ** 2 + (y - self.y) ** 2)
  
-    def send_to_back(self):
-        #make this object be drawn first, so all others appear above it if they're in the same tile.
+    def send_to_back( self ):
+        #Make this object be drawn first, so all others appear above it if they're in the same tile
         global objects
-        objects.remove(self)
-        objects.insert(0, self)
+        objects.remove( self )
+        objects.insert( 0, self )
  
-    def draw(self):
+    def draw( self ):
         #only show if it's visible to the player
-        if libtcod.map_is_in_fov(fov_map, int(self.x), int(self.y)):
-            (x, y) = to_camera_coordinates(self.x, self.y)
- 
-            if x is not None:
-                #set the color and then draw the character that represents this object at its position
-                libtcod.console_set_default_foreground(con, self.color)
-                libtcod.console_put_char(con, x, y + 1, self.char, libtcod.BKGND_NONE)
+        if libtcod.map_is_in_fov(fov_map, self.x, self.y):
+            (x, y) = to_camera_coordinates( self.x, self.y)
+
+            if x is not None:   #Only draw if it's on screen
+                #Set the colour and then draw the character that represents this object at its position
+                libtcod.console_set_char_foreground( con, int(x), int(y), self.colour )
+                libtcod.console_put_char( con, int(x), int(y), self.char, libtcod.BKGND_NONE )
+
+                if self.colour_bg != None:
+                    libtcod.console_set_char_background( con, int(x), int(y), self.colour_bg, libtcod.BKGND_SET )
+                else:
+                    libtcod.console_set_char_background( con, int(x), int(y), libtcod.black, libtcod.BKGND_SET )
  
     def clear(self):
         #erase the character that represents this object
         (x, y) = to_camera_coordinates(self.x, self.y)
         if x is not None:
-            libtcod.console_put_char(con, x, y, ' ', libtcod.BKGND_NONE)
+            libtcod.console_put_char(con, int(x), int(y), ' ', libtcod.BKGND_NONE)
  
 class Fighter:
     #combat-related properties and methods (monster, player, NPC).
@@ -336,17 +437,58 @@ class Item:
         else:
             if self.use_function() != 'cancelled':
                 inventory.remove(self.owner)  #destroy after use, unless it was cancelled for some reason
- 
-def is_blocked(x, y):
+
+def make_ship( pos_x, pos_y ):
+    global map, tiles
+
+    for y in range(len(ship['geometry'])):
+        for x in range(len(ship['geometry'][y])):
+            if ship['geometry'][y][x] != ' ':           #If it's not a blank tile
+
+                map_x = pos_x + x
+                map_y = pos_y + y
+
+                map[map_x][map_y].char = ship['geometry'][y][x] #Change the map tile to the ship object
+
+                #Set tile type
+                map[map_x][map_y].type = ship['colour_map'][y][x]
+                map[map_x][map_y].explored = True #We already know our ship
+                # map[map_x][map_y].space = False
+
+                if map[map_x][map_y].type == 'hull':
+                    #Set up the base hull
+                    map[map_x][map_y].blocked = True
+                    map[map_x][map_y].block_sight = True
+
+                elif map[map_x][map_y].type == 'window':
+                    #Set up Windows
+                    map[map_x][map_y].blocked = True
+
+                elif map[map_x][map_y].type == 'door':
+                    #Set up Doors
+                    map[map_x][map_y].blocked = True
+                    map[map_x][map_y].block_sight = True
+
+                    door_component = Door( map_x, map_y )
+
+                    map[map_x][map_y].tile_behaviour = door_component
+                    door_component.owner = map[map_x][map_y]
+
+                    tiles.append(map[map_x][map_y])
+
+                #Set tile colours
+                map[map_x][map_y].colour = ( ship['colours'][map[map_x][map_y].type]['colour'] )
+
+def is_blocked( x, y ):
     #first test the map tile
     if map[x][y].blocked:
         return True
- 
-    #now check for any blocking objects
+
+    #now check for any objects
     for object in objects:
         if object.blocks and object.x == x and object.y == y:
             return True
- 
+
     return False
  
 def create_room(room):
@@ -356,7 +498,61 @@ def create_room(room):
         for y in range(room.y1 + 1, room.y2):
             map[x][y].blocked = False
             map[x][y].block_sight = False
- 
+
+def create_asteroid( asteroid, numImpacts = None, impactRadius = None ):
+    #Create an asteroid shape from a circle
+    #Take the input circle, and cut out other circles from it (impact craters)
+
+    global map
+
+    #Setup asteroid base data
+    for x in range( asteroid.x1, asteroid.x2 ):
+        for y in range( asteroid.y1, asteroid.y2 ):
+            if asteroid.inCircle( x, y ):
+                if x < MAP_WIDTH and y < MAP_HEIGHT:
+                    map[x][y].name = 'Asteroid rock'
+                    map[x][y].space = False
+                    map[x][y].blocked = True
+                    map[x][y].block_sight = True
+                    map[x][y].char = '#'
+                    map[x][y].colour = spaceColours['asteroid']
+                    map[x][y].colour_hidden = spaceColours['asteroid_hidden']
+                    map[x][y].colour_bg = spaceColours['asteroid_bg']
+                    map[x][y].colour_hidden_bg = spaceColours['asteroid_hidden_bg']
+
+    #setup 'impacts'
+    if numImpacts == None:
+        #If no impacts are specified, work out a value based off the size of the asteroid
+        numImpacts = int(asteroid.radius * 1.4)
+
+    i = 0
+    while i < numImpacts:
+        #Get random map position in circle and check it's at the edge
+        cX = libtcod.random_get_int( 0, asteroid.x1, asteroid.x2 )
+        cY = libtcod.random_get_int( 0, asteroid.y1, asteroid.y2 )
+
+        if asteroid.inCircle( cX, cY ) and (asteroid.distanceFromCentre( cX, cY ) < (asteroid.radius + 1)) and (asteroid.distanceFromCentre( cX, cY ) > (asteroid.radius - 1)):
+            #Valid position found
+
+            #If no impact radius specified, generate a random size per impact
+            if impactRadius == None:
+                thisImpactRadius = int(libtcod.random_get_int( 0, int(asteroid.radius * 0.1), int(asteroid.radius * 0.5)))
+            else:
+                thisImpactRadius = impactRadius
+
+            #Create a circle 'impact' and subtract it from the map
+            impact = Circle( cX, cY, thisImpactRadius )
+            for x in range(impact.x1, impact.x2):
+                for y in range(impact.y1, impact.y2):
+                    if impact.inCircle( x, y ):
+                        if x < MAP_WIDTH and y < MAP_HEIGHT:
+                            map[x][y].name = 'Asteroid rock floor'
+                            map[x][y].char = random.choice( [';', ',', '.'] )
+                            map[x][y].colour_bg = spaceColours['asteroid_floor_bg']
+                            map[x][y].blocked = False
+                            map[x][y].block_sight = False
+            i += 1
+
 def create_h_tunnel(x1, x2, y):
     global map
     #horizontal tunnel. min() and max() are used in case x1>x2
@@ -371,8 +567,11 @@ def create_v_tunnel(y1, y2, x):
         map[int(x)][y].blocked = False
         map[int(x)][y].block_sight = False
  
-def random_from_list( inList = [] ):
-    random.choice(inList)
+def randomColourRange( inColourMin = [0,0,0], inColourMax = [255,255,255] ):
+    return libtcod.Color(   random.randint( inColourMin[0], inColourMax[0] ),
+                            random.randint( inColourMin[1], inColourMax[1] ),
+                            random.randint( inColourMin[2], inColourMax[2] )
+                        )
 
 def make_starfield():
     global map_bg, tiles
@@ -443,7 +642,7 @@ def ang(lineA, lineB):
         return ang_deg
 
 def make_planet( ):
-    global map_planet
+    global map_planet, ship
 
     map_planet = [[Tile(False, char = ' ', colour = libtcod.Color(40,40,50), colour_bg = libtcod.Color(12,12,20), colour_hidden = libtcod.Color(30,30,40), colour_hidden_bg = libtcod.Color(12,12,12) )
                 for y in range(int(MAP_HEIGHT * 2)) ]
@@ -533,74 +732,27 @@ def make_map():
     make_planet()
     make_dust()
 
-    player.x = MAP_WIDTH / 2
-    player.y = MAP_HEIGHT / 2
+    asteroids = []
+    num_asteroids = 0
 
-    ship = Rect( player.x + 10, player.y, 10, 10)
+    MAX_ASTEROIDS = 5   
 
-    for x in range(ship.x1, ship.x2):
-        for y in range(ship.y1, ship.y2):
-            map[x][y].blocked = True
-            map[x][y].block_sight = True
-    '''
-    rooms = []
-    num_rooms = 0
+    for a in range( MAX_ASTEROIDS ):
+        #Random radius
+        radius = libtcod.random_get_int( 0, 2, 10 )
+        x = libtcod.random_get_int( 0, 0, MAP_WIDTH )
+        y = libtcod.random_get_int( 0, 0, MAP_HEIGHT )
+        new_asteroid = Circle( x, y, radius )
 
-    for r in range(MAX_ROOMS):
-        #random width and height
-        w = libtcod.random_get_int(0, ROOM_MIN_SIZE, ROOM_MAX_SIZE)
-        h = libtcod.random_get_int(0, ROOM_MIN_SIZE, ROOM_MAX_SIZE)
-        #random position without going out of the boundaries of the map
-        x = libtcod.random_get_int(0, 0, MAP_WIDTH - w - 1)
-        y = libtcod.random_get_int(0, 0, MAP_HEIGHT - h - 1)
- 
-        #"Rect" class makes rectangles easier to work with
-        new_room = Rect(x, y, w, h)
- 
-        #run through the other rooms and see if they intersect with this one
-        failed = False
-        for other_room in rooms:
-            if new_room.intersect(other_room):
-                failed = True
-                break
- 
-        if not failed:
-            #this means there are no intersections, so this room is valid
- 
-            #"paint" it to the map's tiles
-            create_room(new_room)
- 
-            #add some contents to this room, such as monsters
-            place_objects(new_room)
- 
-            #center coordinates of new room, will be useful later
-            (new_x, new_y) = new_room.center()
- 
-            if num_rooms == 0:
-                #this is the first room, where the player starts at
-                player.x = new_x
-                player.y = new_y
-            else:
-                #all rooms after the first:
-                #connect it to the previous room with a tunnel
- 
-                #center coordinates of previous room
-                (prev_x, prev_y) = rooms[num_rooms-1].center()
- 
-                #draw a coin (random number that is either 0 or 1)
-                if libtcod.random_get_int(0, 0, 1) == 1:
-                    #first move horizontally, then vertically
-                    create_h_tunnel(prev_x, new_x, prev_y)
-                    create_v_tunnel(prev_y, new_y, new_x)
-                else:
-                    #first move vertically, then horizontally
-                    create_v_tunnel(prev_y, new_y, prev_x)
-                    create_h_tunnel(prev_x, new_x, new_y)
- 
-            #finally, append the new room to the list
-            rooms.append(new_room)
-            num_rooms += 1
-    '''
+        asteroids.append(create_asteroid(new_asteroid))
+
+    player_ship = Rect( player.x + 10, player.y, 10, 10)
+
+    ship_x, ship_y = 15, 15
+    make_ship( ship_x, ship_y )
+
+    player.x = ship_x + 9
+    player.y = ship_y + 3
  
 def place_objects(room):
     #choose random number of monsters
@@ -694,9 +846,11 @@ def get_names_under_mouse():
     names = [obj.name for obj in objects
         if obj.x == x and obj.y == y and libtcod.map_is_in_fov(fov_map, int(obj.x), int(obj.y))]
  
-    for tile in tiles:
-        if tile.x == x and tile.y == y and libtcod.map_is_in_fov(fov_map, tile.x, tile.y) and tile.name != None:
-            names.append( tile.name )
+    #Check if the tile under the mouse has a name and add it if it's valid
+    for map_x in range(MAP_WIDTH):
+        for map_y in range(MAP_HEIGHT):
+            if map[x][y].name != None and libtcod.map_is_in_fov( fov_map, x, y ) and map[x][y].name not in names:
+                names.append( map[x][y].name )
 
     names = ', '.join(names)  #join the names, separated by commas
     return names.capitalize()
@@ -705,8 +859,8 @@ def move_camera(target_x, target_y):
     global camera_x, camera_y, fov_recompute
  
     #new camera coordinates (top-left corner of the screen relative to the map)
-    x = target_x - CAMERA_WIDTH / 2  #coordinates so that the target is at the center of the screen
-    y = target_y - CAMERA_HEIGHT / 2
+    x = int(target_x - CAMERA_WIDTH / 2)  #coordinates so that the target is at the center of the screen
+    y = int(target_y - CAMERA_HEIGHT / 2)
  
     #make sure the camera doesn't see outside the map
     if x < 0: x = 0
@@ -724,23 +878,22 @@ def to_camera_coordinates(x, y):
  
     if (x < 0 or y < 0 or x >= CAMERA_WIDTH or y >= CAMERA_HEIGHT):
         return (None, None)  #if it's outside the view, return nothing
+ 
+    return (x, y)
 
-    return (int(x), int(y))
- 
 def render_all():
-    global fov_map, color_dark_wall, color_light_wall
-    global color_dark_ground, color_light_ground
-    global fov_recompute
- 
+    global fov_map, fov_recompute, dungeon_level
+  
     move_camera(player.x, player.y)
- 
+
     if fov_recompute:
+
         #recompute FOV if needed (the player moved or something)
         fov_recompute = False
         libtcod.map_compute_fov(fov_map, int(player.x), int(player.y), TORCH_RADIUS, FOV_LIGHT_WALLS, FOV_ALGO)
         libtcod.console_clear(con)
 
-        libtcod.console_set_default_background(con, libtcod.black)
+        # libtcod.console_set_default_background(con, libtcod.black)
         # libtcod.console_set_char_foreground(con, x, y, col)
         
         #Render star field
@@ -774,7 +927,6 @@ def render_all():
                 (map_x, map_y) = (int(camera_x + x), int(camera_y + y))
                 visible = libtcod.map_is_in_fov(fov_map, map_x, map_y)
  
-                wall = map[map_x][map_y].block_sight
                 if not visible:
                     #if it's not visible right now, the player can only see it if it's explored
                     if map[map_x][map_y].explored:
@@ -818,7 +970,7 @@ def render_all():
  
     #blit the contents of "panel" to the root console
     libtcod.console_blit(panel, 0, 0, SCREEN_WIDTH, PANEL_HEIGHT, 0, 0, PANEL_Y)
- 
+
  
 def message(new_msg, color = libtcod.white):
     #split the message if necessary, among multiple lines
@@ -831,69 +983,73 @@ def message(new_msg, color = libtcod.white):
  
         #add the new line as a tuple, with the text and the color
         game_msgs.append( (line, color) )
-        66
-def player_move_or_attack(dx, dy):
+        
+def player_move_or_attack( dx, dy ):
     global fov_recompute
- 
-    #the coordinates the player is moving to/attacking
+
+    #Coordinates the player is moving to, or attacking
     x = player.x + dx
     y = player.y + dy
 
-    #try to find an attackable object there
+    #Try to find an atttackable object there
     target = None
     for object in objects:
+        #Check if object has a fighter component, and if it's where we want to move to
         if object.fighter and object.x == x and object.y == y:
             target = object
             break
 
-    #attack if target found, move otherwise
+    #attack the target found, move otherwise
     if target is not None:
+        #Attack
         player.fighter.attack(target)
+    elif x >= MAP_WIDTH - 1 or x < 0 or y >= MAP_HEIGHT - 1 or y < 0:
+        #Edge of world, display message
+        message( 'Nothing but billions of lightyears of space in this direction...', libtcod.yellow )
     else:
         player.move(dx, dy)
         fov_recompute = True
 
-def menu(header, options, width):
-    if len(options) > 26: raise ValueError('Cannot have a menu with more than 26 options.')
- 
-    #calculate total height for the header (after auto-wrap) and one line per option
-    header_height = libtcod.console_get_height_rect(con, 0, 0, width, SCREEN_HEIGHT, header)
+def menu( header, options, width, yOffset = 0 ):
+
+    if len(options) > 26: raise ValueError('Menu cannot have more than 26 options.')
+
+    #Calculate total height for the header ( after, auto-wrap )
+    header_height = libtcod.console_get_height_rect( con, 0, 0, width, SCREEN_HEIGHT, header )
     if header == '':
         header_height = 0
     height = len(options) + header_height
- 
-    #create an off-screen console that represents the menu's window
-    window = libtcod.console_new(width, height)
- 
+
+    #Create an off screen console that represents the menu's window
+    window = libtcod.console_new( width, height )
+
     #print the header, with auto-wrap
-    libtcod.console_set_default_foreground(window, libtcod.white)
-    libtcod.console_print_rect_ex(window, 0, 0, width, height, libtcod.BKGND_NONE, libtcod.LEFT, header)
- 
+    libtcod.console_set_default_foreground( window, libtcod.white )
+    libtcod.console_print_rect_ex( window, 0, 0, width, height, libtcod.BKGND_NONE, libtcod.LEFT, header )
+
     #print all the options
     y = header_height
     letter_index = ord('a')
     for option_text in options:
-        text = '(' + chr(letter_index) + ') ' + option_text
-        libtcod.console_print_ex(window, 0, y, libtcod.BKGND_NONE, libtcod.LEFT, text)
+        text = '({letter_index}) {option_text}'.format( letter_index = chr(letter_index), option_text = option_text )
+        libtcod.console_print_ex( window, 0, y, libtcod.BKGND_NONE, libtcod.LEFT, text )
         y += 1
         letter_index += 1
- 
-    #blit the contents of "window" to the root console
-    x = int(SCREEN_WIDTH/2 - width/2)
-    y = int(SCREEN_HEIGHT/2 - height/2)
-    libtcod.console_blit(window, 0, 0, width, height, 0, x, y, 1.0, 0.7)
- 
-    #present the root console to the player and wait for a key-press
+
+    #blit the contenst of the "window" to the root console
+    x = int(SCREEN_WIDTH / 2 - width / 2)
+    y = int(SCREEN_HEIGHT / 2 - height / 2)
+    libtcod.console_blit( window, 0, 0, width, height, 0, x, y + yOffset, 1.0, 0.7 )
+
+    #present the root console to the player and wait for a key press
     libtcod.console_flush()
     key = libtcod.console_wait_for_keypress(True)
-    if key.vk == libtcod.KEY_ENTER and key.lalt:  #(special case) Alt+Enter: toggle fullscreen
-        libtcod.console_set_fullscreen(not libtcod.console_is_fullscreen())
- 
-    #convert the ASCII code to an index; if it corresponds to an option, return it
+
+    #Waiting for key press.
+    #Convert the ASCII code to an index; if it corresponds to an item, return it
     index = key.c - ord('a')
     if index >= 0 and index < len(options): return index
-    return None
- 
+
 def inventory_menu(header):
     #show a menu with each item of the inventory as an option
     if len(inventory) == 0:
@@ -910,52 +1066,69 @@ def inventory_menu(header):
 def msgbox(text, width=50):
     menu(text, [], width)  #use menu() as a sort of "message box"
  
+######################################################
+#                       INPUT
+######################################################
+
 def handle_keys():
-    global key
- 
-    if key.vk == libtcod.KEY_ENTER and key.lalt:
-        #Alt+Enter: toggle fullscreen
-        libtcod.console_set_fullscreen(not libtcod.console_is_fullscreen())
- 
-    elif key.vk == libtcod.KEY_ESCAPE:
-        return 'exit'  #exit game
- 
+    global fov_recompute, game_state, key
+
+    if key.vk == libtcod.KEY_ESCAPE:
+        return 'exit' #Exit
+
     if game_state == 'playing':
-        #movement keys
+        #Movement Keys
         if key.vk == libtcod.KEY_UP or key.vk == libtcod.KEY_KP8:
-            player_move_or_attack(0, -1)
+            player_move_or_attack( 0, -1 )
+            fov_recompute = True
         elif key.vk == libtcod.KEY_DOWN or key.vk == libtcod.KEY_KP2:
-            player_move_or_attack(0, 1)
+            player_move_or_attack( 0, 1 )
+            fov_recompute = True
         elif key.vk == libtcod.KEY_LEFT or key.vk == libtcod.KEY_KP4:
-            player_move_or_attack(-1, 0)
+            player_move_or_attack( -1, 0 )
+            fov_recompute = True
         elif key.vk == libtcod.KEY_RIGHT or key.vk == libtcod.KEY_KP6:
-            player_move_or_attack(1, 0)
+            player_move_or_attack( 1, 0 )
+            fov_recompute = True
+        elif key.vk ==  libtcod.KEY_KP7:
+            player_move_or_attack( -1, -1 )
+            fov_recompute = True
+        elif key.vk ==  libtcod.KEY_KP9:
+            player_move_or_attack( 1, -1 )
+            fov_recompute = True
+        elif key.vk ==  libtcod.KEY_KP3:
+            player_move_or_attack( 1, 1 )
+            fov_recompute = True
+        elif key.vk ==  libtcod.KEY_KP1:
+            player_move_or_attack( -1, 1 )
+            fov_recompute = True
+
         else:
-            #test for other keys
-            key_char = chr(key.c)
- 
+            #check for other keys
+            key_char = chr( key.c )
+
             if key_char == 'g':
                 #pick up an item
-                for object in objects:  #look for an item in the player's tile
+                for object in objects:  #look for an item under the player
                     if object.x == player.x and object.y == player.y and object.item:
                         object.item.pick_up()
                         break
- 
-            if key_char == 'i':
-                #show the inventory; if an item is selected, use it
-                chosen_item = inventory_menu('Press the key next to an item to use it, or any other to cancel.\n')
+            elif key_char == 'i':
+                #show the inventory
+                chosen_item = inventory_menu( 'Press the key next to an item to use it, or any other to cancel.\n' )
                 if chosen_item is not None:
                     chosen_item.use()
- 
-            if key_char == 'd':
-                #show the inventory; if an item is selected, drop it
-                chosen_item = inventory_menu('Press the key next to an item to drop it, or any other to cancel.\n')
+            elif key_char == 'd':
+                #Drop an item from your inventory
+                chosen_item = inventory_menu( 'Press the key next to an item to drop it, or any other to cancel.\n' )
                 if chosen_item is not None:
                     chosen_item.drop()
- 
-            return 'didnt-take-turn'
+            elif key_char == '<':
+                #Go down stairs
+                if stairs.x == player.x and stairs.y == player.y:
+                    next_level()
 
-    # updatePlanet()
+            return 'no_turn'
  
 def player_death(player):
     #the game ended!
@@ -1094,18 +1267,18 @@ def load_game():
     game_state = file['game_state']
     file.close()
  
-    initialize_fov()
+    initalise_FOV()
  
 def new_game():
     global player, inventory, game_msgs, game_state
  
     #create object representing the player
     fighter_component = Fighter(hp=30, defense=2, power=5, death_function=player_death)
-    player = Object(0, 0, '@', 'player', libtcod.white, blocks=True, fighter=fighter_component)
+    player = Object(0, 0, '@', 'player', colour = libtcod.white, colour_bg = None, blocks=True, fighter=fighter_component)
  
     #generate map (at this point it's not drawn to the screen)
     make_map()
-    initialize_fov()
+    initalise_FOV()
  
     game_state = 'playing'
     inventory = []
@@ -1116,81 +1289,98 @@ def new_game():
     #a warm welcoming message!
     message('Welcome stranger! Prepare to perish in the Tombs of the Ancient Kings.', libtcod.red)
  
-def initialize_fov():
+def initalise_FOV():
     global fov_recompute, fov_map
     fov_recompute = True
- 
-    #create the FOV map, according to the generated map
+
+    #Create a field of view map according to the generated map
     fov_map = libtcod.map_new(MAP_WIDTH, MAP_HEIGHT)
     for y in range(MAP_HEIGHT):
         for x in range(MAP_WIDTH):
-            libtcod.map_set_properties(fov_map, x, y, not map[x][y].blocked, not map[x][y].block_sight)
- 
-    libtcod.console_clear(con)  #unexplored areas start black (which is the default background color)
+            libtcod.map_set_properties(fov_map, x, y, not map[x][y].block_sight, not map[x][y].blocked)
  
 def play_game():
-    global camera_x, camera_y, key, mouse
- 
+    global key, mouse, camera_x, camera_y, fov_recompute
+
     player_action = None
-    mouse = libtcod.Mouse()
-    key = libtcod.Key()
- 
-    (camera_x, camera_y) = (0, 0)
- 
+
+    (camera_x, camera_y) = ( 0, 0 )
+
     while not libtcod.console_is_window_closed():
-        #render the screen
-        libtcod.sys_check_for_event(libtcod.EVENT_KEY_PRESS|libtcod.EVENT_MOUSE,key,mouse)
+        #Render the screen
+        libtcod.sys_check_for_event( libtcod.EVENT_KEY_PRESS | libtcod.EVENT_MOUSE, key, mouse )
         render_all()
- 
+
         libtcod.console_flush()
- 
+
         #erase all objects at their old locations, before they move
         for object in objects:
             object.clear()
- 
-        #handle keys and exit game if needed
+
+        #Handle keys and exit game if needed
         player_action = handle_keys()
         if player_action == 'exit':
             save_game()
             break
- 
-        #let monsters take their turn
-        if game_state == 'playing' and player_action != 'didnt-take-turn':
+
+        #let monsters take their turn and update tile behaviours
+        if game_state == 'playing' and player_action != 'no_turn':
             for object in objects:
                 if object.ai:
                     object.ai.take_turn()
- 
+            for tile in tiles:
+                if tile.tile_behaviour:
+                    tile.tile_behaviour.update()
+
 def main_menu():
-    img = libtcod.image_load(b'menu_background.png')
- 
+    img = libtcod.image_load( b'menu_background.png' )
+
     while not libtcod.console_is_window_closed():
-        #show the background image, at twice the regular console resolution
+        #show the background image, at twice regular console resolution
         libtcod.image_blit_2x(img, 0, 0, 0)
- 
-        #show the game's title, and some credits!
-        libtcod.console_set_default_foreground(0, libtcod.light_yellow)
-        libtcod.console_print_ex(0, int(SCREEN_WIDTH/2), int(SCREEN_HEIGHT/2-4), libtcod.BKGND_NONE, libtcod.CENTER, 'TOMBS OF THE ANCIENT KINGS')
-        libtcod.console_print_ex(0, int(SCREEN_WIDTH/2), int(SCREEN_HEIGHT-2), libtcod.BKGND_NONE, libtcod.LEFT, 'By Jotaf')
- 
-        #show options and wait for the player's choice
-        choice = menu('', ['Play a new game', 'Continue last game', 'Quit'], 24)
-        if choice == 0:  #new game
+
+        #Show the game title and some credits!
+        libtcod.console_set_default_foreground( 0, libtcod.light_yellow )
+        libtcod.console_print_ex(   0, int(SCREEN_WIDTH / 2), int(SCREEN_HEIGHT / 2 + 12), libtcod.BKGND_NONE, libtcod.CENTER,
+                                    b'SALVAGE' )
+        libtcod.console_print_ex(   0, int(SCREEN_WIDTH / 2), int(SCREEN_HEIGHT - 2), libtcod.BKGND_NONE, libtcod.CENTER,
+                                    b'gibbonofdoom'  )
+
+        #show options and wait for player's choice
+        choice = menu( '', ['Play a new game', 'Continue last game', 'Quit'], 24, yOffset = 16 )
+
+        if choice == 0:     #new game
             new_game()
             play_game()
-        if choice == 1:  #load last game
+        elif choice == 1:   #load game
             try:
                 load_game()
+                play_game()
             except:
-                msgbox('\n No saved game to load.\n', 24)
+                msg_box('\n No saved game to load.\n', 24)
                 continue
-            play_game()
-        elif choice == 2:  #quit
+        elif choice == 2:   #quit
             break
- 
-libtcod.console_set_custom_font(b'arial10x10.png', libtcod.FONT_TYPE_GREYSCALE | libtcod.FONT_LAYOUT_TCOD)
-libtcod.console_init_root(SCREEN_WIDTH, SCREEN_HEIGHT, b'python/libtcod tutorial', False)
-libtcod.sys_set_fps(LIMIT_FPS)
-con = libtcod.console_new(MAP_WIDTH, MAP_HEIGHT)
+
+#############################################
+#############################################
+
+#Screen Data
+libtcod.console_set_custom_font( b'arial10x10.png', libtcod.FONT_TYPE_GREYSCALE | libtcod.FONT_LAYOUT_TCOD )
+libtcod.console_init_root( SCREEN_WIDTH, SCREEN_HEIGHT, title = b'Salvage', fullscreen =False )
+
+#Consoles
+con = libtcod.console_new( SCREEN_WIDTH, SCREEN_HEIGHT )
 panel = libtcod.console_new(SCREEN_WIDTH, PANEL_HEIGHT)
- 
+
+#Mouse input
+mouse = libtcod.Mouse()
+key = libtcod.Key()
+
+#Set frame limit
+libtcod.sys_set_fps( LIMIT_FPS )
+
 main_menu()
+
+#############################################
+#############################################
