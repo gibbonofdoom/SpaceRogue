@@ -41,3 +41,6 @@ $RECYCLE.BIN/
 Network Trash Folder
 Temporary Items
 .apdisk
+SpaceRogue.sublime-project
+SpaceRogue.sublime-workspace
+__pycache__/libtcodpy.cpython-35.pyc
