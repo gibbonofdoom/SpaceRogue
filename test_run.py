@@ -159,32 +159,27 @@ class Tile( ):
 #                  TILE BEHAVIOUR
 ######################################################
 
-class Door( ):
-    global map, fov_recompute
-
-    def __init__( self, x, y, doorRange = 2 ):
-        self.x = x
-        self.y = y
+class Door(  ):
+    def __init__( self, doorRange = 2, alwaysVisible = True ):  #Door 'AI'
         self.doorRange = doorRange
+        self.alwaysVisible = alwaysVisible
 
     #Door tile_behaviour component for a tile
-    def update( self ):
+    def take_turn( self ):
+        global map, fov_recompute
+
+        object_map_pos = to_camera_coordinates(self.owner.x, self.owner.y)
+
         #Update the tile when needed
-        if ( self.distance_to( player ) <= self.doorRange):
+        if ( self.owner.distance_to( player ) <= self.doorRange):
             self.owner.char = '-'
-            self.owner.blocked = False
-            self.owner.block_sight = False
+            self.owner.blocks = False
+            fov_recompute = True
+
         else:
             self.owner.char = 205
-            self.owner.blocked = True
-            self.owner.block_sight = True
-        fov_recompute = True
-
-    def distance_to( self, other ):
-        #return the distance to another object
-        dx = other.x - self.x
-        dy = other.y - self.y
-        return math.sqrt( dx ** 2 + dy ** 2 )
+            self.owner.blocks = True
+            fov_recompute = True
 
 class Rect( ):
     #a rectangle on the map. used to characterize a room.
@@ -221,8 +216,9 @@ class Circle( Rect ):
         return  math.sqrt( (x - centreX) ** 2 + ( y - centreY ) ** 2 )
             
 class Ellipse( ):
-                        #midX midY, radius Horizonal, radius Vertical
     def __init__( self, mx, my, rh, rv ):
+                #midX midY, radius Horizonal, radius Vertical
+
         self.mx = mx
         self.my = my
         self.rh = rh
@@ -274,6 +270,7 @@ class Object:
         self.colour_bg = colour_bg
         self.blocks = blocks
         self.fighter = fighter
+
         if self.fighter:  #let the fighter component know who owns it
             self.fighter.owner = self
  
@@ -333,7 +330,11 @@ class Object:
                     libtcod.console_set_char_background( con, int(x), int(y), self.colour_bg, libtcod.BKGND_SET )
                 else:
                     libtcod.console_set_char_background( con, int(x), int(y), libtcod.black, libtcod.BKGND_SET )
- 
+        elif self.ai.alwaysVisible:
+            (x, y) = to_camera_coordinates( self.x, self.y)
+            if x is not None:
+                libtcod.console_put_char_ex(con, int(x), int(y), self.char, self.colour, libtcod.BKGND_NONE)
+
     def clear(self):
         #erase the character that represents this object
         (x, y) = to_camera_coordinates(self.x, self.y)
@@ -466,15 +467,8 @@ def make_ship( pos_x, pos_y ):
 
                 elif map[map_x][map_y].type == 'door':
                     #Set up Doors
-                    map[map_x][map_y].blocked = True
-                    map[map_x][map_y].block_sight = True
-
-                    door_component = Door( map_x, map_y )
-
-                    map[map_x][map_y].tile_behaviour = door_component
-                    door_component.owner = map[map_x][map_y]
-
-                    tiles.append(map[map_x][map_y])
+                    ship_door = Object( map_x, map_y, map[map_x][map_y].char, 'Door', colour = libtcod.light_grey, ai = Door( ) )
+                    objects.append( ship_door )
 
                 #Set tile colours
                 map[map_x][map_y].colour = ( ship['colours'][map[map_x][map_y].type]['colour'] )
@@ -499,11 +493,13 @@ def create_room(room):
             map[x][y].blocked = False
             map[x][y].block_sight = False
 
-def create_asteroid( asteroid, numImpacts = None, impactRadius = None ):
+def create_asteroid( asteroid, numImpacts = None, impactRadius = None, monster_nest = True ):
     #Create an asteroid shape from a circle
     #Take the input circle, and cut out other circles from it (impact craters)
 
     global map
+
+    monster_nest_locations = []
 
     #Setup asteroid base data
     for x in range( asteroid.x1, asteroid.x2 ):
@@ -551,7 +547,41 @@ def create_asteroid( asteroid, numImpacts = None, impactRadius = None ):
                             map[x][y].colour_bg = spaceColours['asteroid_floor_bg']
                             map[x][y].blocked = False
                             map[x][y].block_sight = False
+
+                            if asteroid.inCircle(x, y):
+                                #Add the point of the impact to the monster_nest_locations
+                                monster_nest_locations.append((x, y))
             i += 1
+
+    if monster_nest and len(monster_nest_locations) > 0:
+        monster_nest_point = random.choice(monster_nest_locations)
+        create_monster_nest( monster_nest_point[0], monster_nest_point[1] )
+
+def create_monster_nest( x, y, growLength = 5 ):
+    global map
+
+    map[x][y].colour_bg = libtcod.light_green
+    map[x][y].name = 'Creature Nest'
+
+    stopChance = 0
+    growTiles = getAdjacentTiles(map, x, y)
+
+    while random.random() > stopChance:
+        newGrowTiles = []
+
+        for t in growTiles:
+            if random.random() < 0.5:
+                map[t[0]][t[1]].colour += libtcod.green
+                map[t[0]][t[1]].colour_bg += libtcod.darkest_green
+                map[t[0]][t[1]].name = 'Creature Nest'
+                for nT in getAdjacentTiles(map, t[0], t[1]):
+                    if nT != (x, y):
+                        newGrowTiles.append(nT)
+
+        growTiles = newGrowTiles
+
+        stopChance += 0.2
+
 
 def create_h_tunnel(x1, x2, y):
     global map
@@ -566,7 +596,15 @@ def create_v_tunnel(y1, y2, x):
     for y in range( int(min(y1, y2)),  int(max(y1, y2) + 1)):
         map[int(x)][y].blocked = False
         map[int(x)][y].block_sight = False
- 
+
+def getAdjacentTiles( map, x, y, notChar = ' ' ):
+    tiles = []
+    for grid in [ (x+1, y+0), (x+1, y+1), (x+0, y+1), (x-1, y+1), (x-1, y+0), (x-1, y-1), (x+0, y-1), (x+1, y-1) ]:
+        if map[grid[0]][grid[1]].char != notChar:
+            tiles.append( grid )
+
+    return tiles
+
 def randomColourRange( inColourMin = [0,0,0], inColourMax = [255,255,255] ):
     return libtcod.Color(   random.randint( inColourMin[0], inColourMax[0] ),
                             random.randint( inColourMin[1], inColourMax[1] ),
@@ -740,8 +778,8 @@ def make_map():
     for a in range( MAX_ASTEROIDS ):
         #Random radius
         radius = libtcod.random_get_int( 0, 2, 10 )
-        x = libtcod.random_get_int( 0, 0, MAP_WIDTH )
-        y = libtcod.random_get_int( 0, 0, MAP_HEIGHT )
+        x = libtcod.random_get_int( 0, 0, MAP_WIDTH - radius * 3 )
+        y = libtcod.random_get_int( 0, 0, MAP_HEIGHT - radius * 3 )
         new_asteroid = Circle( x, y, radius )
 
         asteroids.append(create_asteroid(new_asteroid))
@@ -1102,7 +1140,6 @@ def handle_keys():
         elif key.vk ==  libtcod.KEY_KP1:
             player_move_or_attack( -1, 1 )
             fov_recompute = True
-
         else:
             #check for other keys
             key_char = chr( key.c )
@@ -1287,7 +1324,7 @@ def new_game():
     game_msgs = []
  
     #a warm welcoming message!
-    message('Welcome stranger! Prepare to perish in the Tombs of the Ancient Kings.', libtcod.red)
+    message('Don\'t forget to breathe', libtcod.red)
  
 def initalise_FOV():
     global fov_recompute, fov_map
